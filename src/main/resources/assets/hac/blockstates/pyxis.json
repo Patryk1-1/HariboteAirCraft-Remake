@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=south": { "model": "hac:pyxis_0" },
+    "facing=west":  { "model": "hac:pyxis_1" },
+    "facing=north": { "model": "hac:pyxis_2" },
+    "facing=east":  { "model": "hac:pyxis_3" }
+  }
+}

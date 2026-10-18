@@ -1,0 +1,18 @@
+tile.hac.pyxis.name=Kompas (Pyxis)
+itemGroup.hac=HariboteAirCraft
+
+key.category.hac=HariboteAirCraft
+key.hac.forward=Pyxis Do przodu
+key.hac.backward=Pyxis Do tyłu
+key.hac.left=Pyxis W lewo (Obrót)
+key.hac.right=Pyxis W prawo (Obrót)
+key.hac.strafe_left=Pyxis Krok w lewo
+key.hac.strafe_right=Pyxis Krok w prawo
+key.hac.up=Pyxis Wznoszenie
+key.hac.down=Pyxis Opadanie
+key.hac.stop=Pyxis Zatrzymaj / Zawiśnij
+key.hac.restore=Pyxis Lądowanie / Przywrócenie bloków
+
+message.hac.captured=Przechwycono %s połączonych bloków.
+message.hac.restored=Przywrócono %s bloków do świata.
+message.hac.blocked=Nie można wylądować! Przestrzeń jest zablokowana.

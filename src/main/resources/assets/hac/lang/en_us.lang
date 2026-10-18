@@ -1,0 +1,18 @@
+tile.hac.pyxis.name=Compass (Pyxis)
+itemGroup.hac=HariboteAirCraft
+
+key.category.hac=HariboteAirCraft
+key.hac.forward=Pyxis Forward
+key.hac.backward=Pyxis Backward
+key.hac.left=Pyxis Turn Left
+key.hac.right=Pyxis Turn Right
+key.hac.strafe_left=Pyxis Strafe Left
+key.hac.strafe_right=Pyxis Strafe Right
+key.hac.up=Pyxis Ascend
+key.hac.down=Pyxis Descend
+key.hac.stop=Pyxis Stop
+key.hac.restore=Pyxis Land / Restore
+
+message.hac.captured=Captured %s connected blocks.
+message.hac.restored=Restored %s blocks to the world.
+message.hac.blocked=Cannot land here! Area is obstructed.

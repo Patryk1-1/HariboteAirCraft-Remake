@@ -1,0 +1,22 @@
+{
+  "textures": {
+    "bottom": "hac:blocks/py_bottom",
+    "top": "hac:blocks/py_top3",
+    "side": "hac:blocks/py_side",
+    "particle": "hac:blocks/py_side"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 8, 16],
+      "faces": {
+        "down":  { "texture": "#bottom" },
+        "up":    { "texture": "#top" },
+        "north": { "texture": "#side", "uv": [0, 0, 16, 8] },
+        "south": { "texture": "#side", "uv": [0, 0, 16, 8] },
+        "west":  { "texture": "#side", "uv": [0, 0, 16, 8] },
+        "east":  { "texture": "#side", "uv": [0, 0, 16, 8] }
+      }
+    }
+  ]
+}

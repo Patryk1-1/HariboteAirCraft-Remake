@@ -1,0 +1,24 @@
+# Gradle & Java
+.gradle/
+build/
+bin/
+out/
+.settings/
+.project
+.classpath
+
+# Minecraft Forge / Run directory
+run/
+*.log
+*.lck
+
+# IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

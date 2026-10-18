@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "hac",
+    "name": "HariboteAirCraft Remake",
+    "description": "A faithful remake of the classic HariboteAirCraft mod for Minecraft 1.12.2 Forge.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["Patryk1_1", "waco"],
+    "credits": "Remake by Patryk1_1. Original HariboteAirCraft by waco/yamato, HAC-Remaster inspiration by SenpeiSenpai",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]
