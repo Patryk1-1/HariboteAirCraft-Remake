@@ -16,6 +16,7 @@ import net.minecraft.client.renderer.entity.Render;
 import net.minecraft.client.renderer.entity.RenderManager;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.util.BlockRenderLayer;
 import net.minecraft.util.EnumBlockRenderType;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.ResourceLocation;
@@ -49,14 +50,6 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
         if (!blocks.isEmpty()) {
             this.bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
             RenderHelper.disableStandardItemLighting();
-            GlStateManager.enableBlend();
-            GlStateManager.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-            GlStateManager.enableAlpha();
-            GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
-
-            Tessellator tessellator = Tessellator.getInstance();
-            BufferBuilder buffer = tessellator.getBuffer();
-            buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
 
             BlockRendererDispatcher dispatcher = Minecraft.getMinecraft().getBlockRendererDispatcher();
             int brightness = entity.getBrightnessForRender();
@@ -66,56 +59,26 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
 
             com.haribote.hac.entity.AircraftBlockAccess blockAccess = entity.getBlockAccess();
 
-            for (CapturedBlock cb : blocks) {
-                IBlockState state = cb.state;
-                if (state == null || state.getRenderType() != EnumBlockRenderType.MODEL) {
-                    continue;
-                }
-
-                // Compute actual state (resolves wall connections, fences, panes, stairs)
-                IBlockState renderState = state;
-                try {
-                    renderState = state.getBlock().getActualState(state, blockAccess, cb.getRelativePos());
-                } catch (Exception ignored) {}
-
-                IBakedModel model = dispatcher.getModelForState(renderState);
-                double bx = cb.dx - 0.5D;
-                double by = cb.dy;
-                double bz = cb.dz - 0.5D;
-
-                int color = Minecraft.getMinecraft().getBlockColors().colorMultiplier(renderState, entity.world, new BlockPos(entity.posX + cb.dx, entity.posY + cb.dy, entity.posZ + cb.dz), 0);
-                float red = (float) ((color >> 16) & 255) / 255.0F;
-                float green = (float) ((color >> 8) & 255) / 255.0F;
-                float blue = (float) (color & 255) / 255.0F;
-
-                for (EnumFacing facing : EnumFacing.VALUES) {
-                    for (BakedQuad quad : model.getQuads(renderState, facing, 0L)) {
-                        buffer.addVertexData(quad.getVertexData());
-                        buffer.putPosition(bx, by, bz);
-                        buffer.putBrightness4(brightness, brightness, brightness, brightness);
-                        if (quad.hasTintIndex()) {
-                            buffer.putColorRGB_F4(red, green, blue);
-                        } else {
-                            buffer.putColorRGB_F4(1.0F, 1.0F, 1.0F);
-                        }
-                    }
-                }
-
-                for (BakedQuad quad : model.getQuads(renderState, null, 0L)) {
-                    buffer.addVertexData(quad.getVertexData());
-                    buffer.putPosition(bx, by, bz);
-                    buffer.putBrightness4(brightness, brightness, brightness, brightness);
-                    if (quad.hasTintIndex()) {
-                        buffer.putColorRGB_F4(red, green, blue);
-                    } else {
-                        buffer.putColorRGB_F4(1.0F, 1.0F, 1.0F);
-                    }
-                }
-            }
-
-            tessellator.draw();
-            RenderHelper.enableStandardItemLighting();
+            // PASS 1: Solid & Cutout (opaque blocks, doors, glass, panes, stairs, pyxis, etc.)
             GlStateManager.disableBlend();
+            GlStateManager.enableAlpha();
+            GlStateManager.alphaFunc(GL11.GL_GREATER, 0.1F);
+            GlStateManager.depthMask(true);
+
+            renderBlockPass(blocks, blockAccess, dispatcher, brightness, false, entity);
+
+            // PASS 2: Translucent (stained glass, stained glass panes, ice, slime, etc.)
+            GlStateManager.enableBlend();
+            GlStateManager.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
+            GlStateManager.enableAlpha();
+            GlStateManager.alphaFunc(GL11.GL_GREATER, 0.003921569F);
+            GlStateManager.depthMask(false);
+
+            renderBlockPass(blocks, blockAccess, dispatcher, brightness, true, entity);
+
+            GlStateManager.depthMask(true);
+            GlStateManager.disableBlend();
+            RenderHelper.enableStandardItemLighting();
         }
 
         // Render compass arrows on top of Pyxis aligned with world cardinal directions
@@ -127,6 +90,94 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
 
         GlStateManager.popMatrix();
         super.doRender(entity, x, y, z, entityYaw, partialTicks);
+    }
+
+    private boolean isTranslucent(IBlockState state) {
+        try {
+            return state.getBlock().canRenderInLayer(state, BlockRenderLayer.TRANSLUCENT);
+        } catch (Throwable t) {
+            return state.getBlock().getRenderLayer() == BlockRenderLayer.TRANSLUCENT;
+        }
+    }
+
+    private void renderBlockPass(List<CapturedBlock> blocks, com.haribote.hac.entity.AircraftBlockAccess blockAccess,
+                                 BlockRendererDispatcher dispatcher, int brightness, boolean translucentPass,
+                                 EntityHacAircraft entity) {
+        Tessellator tessellator = Tessellator.getInstance();
+        BufferBuilder buffer = tessellator.getBuffer();
+        boolean started = false;
+
+        for (CapturedBlock cb : blocks) {
+            IBlockState state = cb.state;
+            if (state == null || state.getRenderType() != EnumBlockRenderType.MODEL) {
+                continue;
+            }
+
+            if (isTranslucent(state) != translucentPass) {
+                continue;
+            }
+
+            // Compute actual state (resolves wall connections, fences, panes, stairs)
+            IBlockState renderState = state;
+            try {
+                renderState = state.getBlock().getActualState(state, blockAccess, cb.getRelativePos());
+            } catch (Exception ignored) {}
+
+            IBakedModel model = dispatcher.getModelForState(renderState);
+            double bx = cb.dx - 0.5D;
+            double by = cb.dy;
+            double bz = cb.dz - 0.5D;
+
+            int color = Minecraft.getMinecraft().getBlockColors().colorMultiplier(renderState, entity.world, new BlockPos(entity.posX + cb.dx, entity.posY + cb.dy, entity.posZ + cb.dz), 0);
+            float red = (float) ((color >> 16) & 255) / 255.0F;
+            float green = (float) ((color >> 8) & 255) / 255.0F;
+            float blue = (float) (color & 255) / 255.0F;
+
+            for (EnumFacing facing : EnumFacing.VALUES) {
+                boolean shouldRender = true;
+                try {
+                    shouldRender = renderState.shouldSideBeRendered(blockAccess, cb.getRelativePos(), facing);
+                } catch (Exception ignored) {}
+
+                if (!shouldRender) continue;
+
+                List<BakedQuad> quads = model.getQuads(renderState, facing, 0L);
+                if (!quads.isEmpty()) {
+                    if (!started) {
+                        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
+                        started = true;
+                    }
+                    for (BakedQuad quad : quads) {
+                        buffer.addVertexData(quad.getVertexData());
+                        buffer.putPosition(bx, by, bz);
+                        buffer.putBrightness4(brightness, brightness, brightness, brightness);
+                        if (quad.hasTintIndex()) {
+                            buffer.putColorRGB_F4(red, green, blue);
+                        }
+                    }
+                }
+            }
+
+            List<BakedQuad> generalQuads = model.getQuads(renderState, null, 0L);
+            if (!generalQuads.isEmpty()) {
+                if (!started) {
+                    buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
+                    started = true;
+                }
+                for (BakedQuad quad : generalQuads) {
+                    buffer.addVertexData(quad.getVertexData());
+                    buffer.putPosition(bx, by, bz);
+                    buffer.putBrightness4(brightness, brightness, brightness, brightness);
+                    if (quad.hasTintIndex()) {
+                        buffer.putColorRGB_F4(red, green, blue);
+                    }
+                }
+            }
+        }
+
+        if (started) {
+            tessellator.draw();
+        }
     }
 
     private void renderCompassArrows(double px, double py, double pz, float yaw) {

@@ -23,6 +23,8 @@ import net.minecraft.util.Rotation;
 import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
 import net.minecraftforge.fml.common.registry.IEntityAdditionalSpawnData;
+import net.minecraftforge.fml.relauncher.Side;
+import net.minecraftforge.fml.relauncher.SideOnly;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,6 +47,14 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     public double minBoundY = 0.0D,  maxBoundY = 0.5D;
     public double minBoundZ = -0.5D, maxBoundZ = 0.5D;
 
+    // Client-side smooth lerping fields to eliminate camera jitter/vibration
+    private int lerpSteps;
+    private double lerpX;
+    private double lerpY;
+    private double lerpZ;
+    private double lerpYaw;
+    private double lerpPitch;
+
     public EntityHacAircraft(World worldIn) {
         super(worldIn);
         this.setSize(1.5F, 0.5F);
@@ -54,9 +64,15 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     }
 
     public EntityHacAircraft(World worldIn, BlockPos origin, List<CapturedBlock> capturedBlocks) {
+        this(worldIn, origin, capturedBlocks, 0.0F);
+    }
+
+    public EntityHacAircraft(World worldIn, BlockPos origin, List<CapturedBlock> capturedBlocks, float initialYaw) {
         this(worldIn);
         this.blocks = capturedBlocks;
         this.setPosition(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+        this.rotationYaw = initialYaw;
+        this.prevRotationYaw = initialYaw;
         this.motionX = 0.0D;
         this.motionY = 0.0D;
         this.motionZ = 0.0D;
@@ -175,7 +191,19 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         this.prevPosZ = this.posZ;
         this.prevRotationYaw = this.rotationYaw;
 
-        if (!this.world.isRemote) {
+        if (this.world.isRemote) {
+            if (this.lerpSteps > 0) {
+                double d0 = this.posX + (this.lerpX - this.posX) / (double) this.lerpSteps;
+                double d1 = this.posY + (this.lerpY - this.posY) / (double) this.lerpSteps;
+                double d2 = this.posZ + (this.lerpZ - this.posZ) / (double) this.lerpSteps;
+                double d3 = MathHelper.wrapDegrees(this.lerpYaw - (double) this.rotationYaw);
+                this.rotationYaw = (float) ((double) this.rotationYaw + d3 / (double) this.lerpSteps);
+                this.rotationPitch = (float) ((double) this.rotationPitch + (this.lerpPitch - (double) this.rotationPitch) / (double) this.lerpSteps);
+                --this.lerpSteps;
+                this.setPosition(d0, d1, d2);
+                this.setRotation(this.rotationYaw, this.rotationPitch);
+            }
+        } else {
             Entity controllingPassenger = this.getControllingPassenger();
             if (controllingPassenger instanceof EntityPlayer) {
                 EntityPlayer pilot = (EntityPlayer) controllingPassenger;
@@ -286,6 +314,17 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         return false;
     }
 
+    @SideOnly(Side.CLIENT)
+    @Override
+    public void setPositionAndRotationDirect(double x, double y, double z, float yaw, float pitch, int posRotationIncrements, boolean teleport) {
+        this.lerpX = x;
+        this.lerpY = y;
+        this.lerpZ = z;
+        this.lerpYaw = (double) yaw;
+        this.lerpPitch = (double) pitch;
+        this.lerpSteps = posRotationIncrements;
+    }
+
     @Override
     public void updatePassenger(Entity passenger) {
         if (this.isPassenger(passenger)) {
@@ -293,16 +332,16 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
             int index = passengers.indexOf(passenger);
 
             double offX = 0.0D;
-            double offY = 0.5D; // Pyxis surface
-            double offZ = 0.0D;
+            double offY = 0.0D;  // Standing/sitting on floor level
+            double offZ = -0.6D; // Standing behind Pyxis helm station
 
             if (index == 0) {
-                // Pilot sits directly on Pyxis
+                // Pilot stands at helm station right behind Pyxis on deck level
                 offX = 0.0D;
-                offY = 0.5D;
-                offZ = 0.0D;
+                offY = 0.0D;
+                offZ = -0.6D;
             } else {
-                // Passengers: assign distinct separate blocks resting cleanly on top surface
+                // Other passengers: assign distinct separate blocks resting cleanly on top surface
                 int blockIdx = index;
                 if (blockIdx < blocks.size() && (blocks.get(blockIdx).dx != 0 || blocks.get(blockIdx).dz != 0)) {
                     CapturedBlock cb = blocks.get(blockIdx);
@@ -311,7 +350,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                     offZ = cb.dz;
                 } else {
                     offX = (index % 2 == 1) ? 1.0D : -1.0D;
-                    offY = 1.0D;
+                    offY = 0.0D;
                     offZ = -1.0D * ((index + 1) / 2);
                 }
             }
@@ -323,6 +362,21 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
             double rz = offX * sin + offZ * cos;
 
             passenger.setPosition(this.posX + rx, this.posY + offY, this.posZ + rz);
+
+            // Interpolate previous positions perfectly with aircraft to eliminate 100% of camera/flight jitter
+            double prevYawRad = Math.toRadians(this.prevRotationYaw);
+            double prevCos = Math.cos(prevYawRad);
+            double prevSin = Math.sin(prevYawRad);
+            double prevRx = offX * prevCos - offZ * prevSin;
+            double prevRz = offX * prevSin + offZ * prevCos;
+
+            passenger.prevPosX = this.prevPosX + prevRx;
+            passenger.prevPosY = this.prevPosY + offY;
+            passenger.prevPosZ = this.prevPosZ + prevRz;
+
+            passenger.lastTickPosX = passenger.prevPosX;
+            passenger.lastTickPosY = passenger.prevPosY;
+            passenger.lastTickPosZ = passenger.prevPosZ;
         }
     }
 
@@ -430,6 +484,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     @Override
     public void writeSpawnData(ByteBuf buffer) {
         PacketBuffer packetBuffer = new PacketBuffer(buffer);
+        packetBuffer.writeFloat(this.rotationYaw);
         packetBuffer.writeInt(blocks.size());
         for (CapturedBlock cb : blocks) {
             cb.writeToBuf(packetBuffer);
@@ -439,6 +494,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     @Override
     public void readSpawnData(ByteBuf additionalData) {
         PacketBuffer packetBuffer = new PacketBuffer(additionalData);
+        this.rotationYaw = packetBuffer.readFloat();
+        this.prevRotationYaw = this.rotationYaw;
         int size = packetBuffer.readInt();
         this.blocks.clear();
         for (int i = 0; i < size; i++) {

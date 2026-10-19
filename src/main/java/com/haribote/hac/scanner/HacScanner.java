@@ -23,9 +23,26 @@ public class HacScanner {
             return;
         }
 
+        IBlockState pyxisState = world.getBlockState(origin);
+        EnumFacing pyxisFacing = EnumFacing.SOUTH;
+        if (pyxisState.getBlock() instanceof com.haribote.hac.block.BlockPyxis) {
+            pyxisFacing = pyxisState.getValue(com.haribote.hac.block.BlockPyxis.FACING);
+        }
+        float initialYaw = pyxisFacing.getHorizontalAngle();
+
+        net.minecraft.util.Rotation toLocalRotation = net.minecraft.util.Rotation.NONE;
+        if (pyxisFacing == EnumFacing.WEST) {
+            toLocalRotation = net.minecraft.util.Rotation.COUNTERCLOCKWISE_90;
+        } else if (pyxisFacing == EnumFacing.NORTH) {
+            toLocalRotation = net.minecraft.util.Rotation.CLOCKWISE_180;
+        } else if (pyxisFacing == EnumFacing.EAST) {
+            toLocalRotation = net.minecraft.util.Rotation.CLOCKWISE_90;
+        }
+
         Queue<BlockPos> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
         List<CapturedBlock> captured = new ArrayList<>();
+        List<BlockPos> scannedPositions = new ArrayList<>();
 
         queue.add(origin);
         visited.add(origin);
@@ -50,7 +67,28 @@ public class HacScanner {
             int dy = current.getY() - origin.getY();
             int dz = current.getZ() - origin.getZ();
 
-            captured.add(new CapturedBlock(dx, dy, dz, state, tileNBT));
+            int lx = dx;
+            int lz = dz;
+            if (pyxisFacing == EnumFacing.WEST) {
+                lx = dz;
+                lz = -dx;
+            } else if (pyxisFacing == EnumFacing.NORTH) {
+                lx = -dx;
+                lz = -dz;
+            } else if (pyxisFacing == EnumFacing.EAST) {
+                lx = -dz;
+                lz = dx;
+            }
+
+            IBlockState localState = state;
+            if (toLocalRotation != net.minecraft.util.Rotation.NONE && localState != null) {
+                try {
+                    localState = localState.withRotation(toLocalRotation);
+                } catch (Exception ignored) {}
+            }
+
+            captured.add(new CapturedBlock(lx, dy, lz, localState, tileNBT));
+            scannedPositions.add(current);
 
             for (EnumFacing facing : EnumFacing.VALUES) {
                 BlockPos neighbor = current.offset(facing);
@@ -69,12 +107,11 @@ public class HacScanner {
         }
 
         // Spawn Aircraft Entity
-        EntityHacAircraft aircraft = new EntityHacAircraft(world, origin, captured);
+        EntityHacAircraft aircraft = new EntityHacAircraft(world, origin, captured, initialYaw);
         world.spawnEntity(aircraft);
 
         // Remove blocks safely from the world
-        for (CapturedBlock cb : captured) {
-            BlockPos blockPos = origin.add(cb.dx, cb.dy, cb.dz);
+        for (BlockPos blockPos : scannedPositions) {
             TileEntity te = world.getTileEntity(blockPos);
             if (te != null) {
                 world.removeTileEntity(blockPos);
@@ -82,6 +119,8 @@ public class HacScanner {
             world.setBlockState(blockPos, Blocks.AIR.getDefaultState(), 2);
         }
 
+        pilot.rotationYaw = initialYaw;
+        pilot.prevRotationYaw = initialYaw;
         pilot.startRiding(aircraft, true);
         if (pilot instanceof net.minecraft.entity.player.EntityPlayerMP) {
             com.haribote.hac.network.HacPacketHandler.INSTANCE.sendTo(
