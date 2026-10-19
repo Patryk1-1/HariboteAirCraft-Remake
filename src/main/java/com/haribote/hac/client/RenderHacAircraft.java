@@ -28,7 +28,6 @@ import java.util.List;
 
 @SideOnly(Side.CLIENT)
 public class RenderHacAircraft extends Render<EntityHacAircraft> {
-    private static final ResourceLocation ROTOR_TEXTURE = new ResourceLocation(HACMod.MODID, "textures/blocks/py_rotor.png");
 
     public RenderHacAircraft(RenderManager renderManager) {
         super(renderManager);
@@ -63,24 +62,32 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
                 brightness = 0x00F000F0;
             }
 
+            com.haribote.hac.entity.AircraftBlockAccess blockAccess = entity.getBlockAccess();
+
             for (CapturedBlock cb : blocks) {
                 IBlockState state = cb.state;
                 if (state == null || state.getRenderType() != EnumBlockRenderType.MODEL) {
                     continue;
                 }
 
-                IBakedModel model = dispatcher.getModelForState(state);
+                // Compute actual state (resolves wall connections, fences, panes, stairs)
+                IBlockState renderState = state;
+                try {
+                    renderState = state.getBlock().getActualState(state, blockAccess, cb.getRelativePos());
+                } catch (Exception ignored) {}
+
+                IBakedModel model = dispatcher.getModelForState(renderState);
                 double bx = cb.dx - 0.5D;
                 double by = cb.dy;
                 double bz = cb.dz - 0.5D;
 
-                int color = Minecraft.getMinecraft().getBlockColors().colorMultiplier(state, entity.world, new BlockPos(entity.posX + cb.dx, entity.posY + cb.dy, entity.posZ + cb.dz), 0);
+                int color = Minecraft.getMinecraft().getBlockColors().colorMultiplier(renderState, entity.world, new BlockPos(entity.posX + cb.dx, entity.posY + cb.dy, entity.posZ + cb.dz), 0);
                 float red = (float) ((color >> 16) & 255) / 255.0F;
                 float green = (float) ((color >> 8) & 255) / 255.0F;
                 float blue = (float) (color & 255) / 255.0F;
 
                 for (EnumFacing facing : EnumFacing.VALUES) {
-                    for (BakedQuad quad : model.getQuads(state, facing, 0L)) {
+                    for (BakedQuad quad : model.getQuads(renderState, facing, 0L)) {
                         buffer.addVertexData(quad.getVertexData());
                         buffer.putPosition(bx, by, bz);
                         buffer.putBrightness4(brightness, brightness, brightness, brightness);
@@ -92,7 +99,7 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
                     }
                 }
 
-                for (BakedQuad quad : model.getQuads(state, null, 0L)) {
+                for (BakedQuad quad : model.getQuads(renderState, null, 0L)) {
                     buffer.addVertexData(quad.getVertexData());
                     buffer.putPosition(bx, by, bz);
                     buffer.putBrightness4(brightness, brightness, brightness, brightness);
@@ -109,42 +116,8 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
             GlStateManager.disableBlend();
         }
 
-        // Render spinning Pyxis rotor on top
-        float rotorAngle = entity.prevRotorAngle + (entity.rotorAngle - entity.prevRotorAngle) * partialTicks;
-        renderRotor(rotorAngle);
-
         GlStateManager.popMatrix();
         super.doRender(entity, x, y, z, entityYaw, partialTicks);
-    }
-
-    private void renderRotor(float rotorAngle) {
-        this.bindTexture(ROTOR_TEXTURE);
-        GlStateManager.pushMatrix();
-        GlStateManager.translate(0.0D, 0.52D, 0.0D);
-        GlStateManager.rotate(rotorAngle, 0.0F, 1.0F, 0.0F);
-
-        GlStateManager.enableBlend();
-        GlStateManager.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder buffer = tessellator.getBuffer();
-
-        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_TEX);
-        double s = 0.5D;
-        buffer.pos(-s, 0.0D, -s).tex(0.0D, 0.0D).endVertex();
-        buffer.pos(-s, 0.0D,  s).tex(0.0D, 1.0D).endVertex();
-        buffer.pos( s, 0.0D,  s).tex(1.0D, 1.0D).endVertex();
-        buffer.pos( s, 0.0D, -s).tex(1.0D, 0.0D).endVertex();
-
-        // Draw back side too so it's visible from below
-        buffer.pos( s, 0.0D, -s).tex(1.0D, 0.0D).endVertex();
-        buffer.pos( s, 0.0D,  s).tex(1.0D, 1.0D).endVertex();
-        buffer.pos(-s, 0.0D,  s).tex(0.0D, 1.0D).endVertex();
-        buffer.pos(-s, 0.0D, -s).tex(0.0D, 0.0D).endVertex();
-        tessellator.draw();
-
-        GlStateManager.disableBlend();
-        GlStateManager.popMatrix();
     }
 
     @Override

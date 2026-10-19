@@ -1,6 +1,7 @@
 package com.haribote.hac.entity;
 
 import com.haribote.hac.block.BlockPyxis;
+import net.minecraft.block.state.IBlockState;
 import com.haribote.hac.network.HacPacketHandler;
 import com.haribote.hac.network.PacketMountAircraft;
 import com.haribote.hac.scanner.CapturedBlock;
@@ -18,6 +19,7 @@ import net.minecraft.util.EnumHand;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Rotation;
 import net.minecraft.util.text.TextComponentTranslation;
 import net.minecraft.world.World;
 import net.minecraftforge.fml.common.registry.IEntityAdditionalSpawnData;
@@ -27,6 +29,7 @@ import java.util.List;
 
 public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnData {
     private List<CapturedBlock> blocks = new ArrayList<>();
+    private AircraftBlockAccess blockAccess;
 
     // Pilot movement inputs
     public float forwardInput = 0.0F;
@@ -96,6 +99,14 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                 this.posX + minBoundX, this.posY + minBoundY, this.posZ + minBoundZ,
                 this.posX + maxBoundX, this.posY + maxBoundY, this.posZ + maxBoundZ
         ));
+        this.blockAccess = new AircraftBlockAccess(this);
+    }
+
+    public AircraftBlockAccess getBlockAccess() {
+        if (this.blockAccess == null) {
+            this.blockAccess = new AircraftBlockAccess(this);
+        }
+        return this.blockAccess;
     }
 
     @Override
@@ -163,14 +174,6 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         this.prevPosY = this.posY;
         this.prevPosZ = this.posZ;
         this.prevRotationYaw = this.rotationYaw;
-        this.prevRotorAngle = this.rotorAngle;
-
-        // Rotor animation
-        this.rotorAngle += 25.0F;
-        if (this.rotorAngle >= 360.0F) {
-            this.rotorAngle -= 360.0F;
-            this.prevRotorAngle -= 360.0F;
-        }
 
         if (!this.world.isRemote) {
             Entity controllingPassenger = this.getControllingPassenger();
@@ -178,11 +181,12 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                 EntityPlayer pilot = (EntityPlayer) controllingPassenger;
 
                 // Smooth yaw banking towards pilot look angle
-                float yawDiff = MathHelper.wrapDegrees(pilot.rotationYaw - this.rotationYaw);
+                float targetYaw = pilot.rotationYaw;
+                float yawDiff = MathHelper.wrapDegrees(targetYaw - this.rotationYaw);
                 if (turnInput != 0.0F) {
                     this.rotationYaw += turnInput * 3.5F;
-                } else if (Math.abs(yawDiff) > 0.5F) {
-                    this.rotationYaw += yawDiff * 0.25F; // Smooth banking & turning
+                } else if (Math.abs(yawDiff) > 1.0F) {
+                    this.rotationYaw += yawDiff * 0.20F; // Smooth banking & turning
                 }
 
                 double yawRad = Math.toRadians(this.rotationYaw);
@@ -268,15 +272,6 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                     }
                 }
             }
-        } else {
-            // Client side: if local player is pilot, apply motion immediately for zero latency!
-            if (this.getControllingPassenger() == Minecraft.getMinecraft().player) {
-                this.setPosition(this.posX + this.motionX, this.posY + this.motionY, this.posZ + this.motionZ);
-                this.setEntityBoundingBox(new AxisAlignedBB(
-                        this.posX + minBoundX, this.posY + minBoundY, this.posZ + minBoundZ,
-                        this.posX + maxBoundX, this.posY + maxBoundY, this.posZ + maxBoundZ
-                ));
-            }
         }
     }
 
@@ -287,7 +282,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
     @Override
     public boolean canPassengerSteer() {
-        return true;
+        // Return false so Minecraft NetHandlerPlayServer never spams 'moved wrongly' or resets vehicle position!
+        return false;
     }
 
     @Override
@@ -349,9 +345,21 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         int targetZ = (int) Math.round(this.posZ - 0.5D);
         BlockPos basePos = new BlockPos(targetX, targetY, targetZ);
 
+        int quadrant = Math.floorMod((int) Math.round(this.rotationYaw / 90.0D), 4);
+        Rotation rotation = Rotation.NONE;
+        if (quadrant == 1) rotation = Rotation.CLOCKWISE_90;
+        else if (quadrant == 2) rotation = Rotation.CLOCKWISE_180;
+        else if (quadrant == 3) rotation = Rotation.COUNTERCLOCKWISE_90;
+
         // Check if destination positions are free or replaceable
         for (CapturedBlock cb : blocks) {
-            BlockPos targetPos = basePos.add(cb.dx, cb.dy, cb.dz);
+            int rx = cb.dx;
+            int rz = cb.dz;
+            if (quadrant == 1) { rx = -cb.dz; rz = cb.dx; }
+            else if (quadrant == 2) { rx = -cb.dx; rz = -cb.dz; }
+            else if (quadrant == 3) { rx = cb.dz; rz = -cb.dx; }
+
+            BlockPos targetPos = basePos.add(rx, cb.dy, rz);
             if (!this.world.isAirBlock(targetPos) && !this.world.getBlockState(targetPos).getBlock().isReplaceable(this.world, targetPos)) {
                 Entity controlling = getControllingPassenger();
                 if (controlling instanceof EntityPlayer) {
@@ -363,8 +371,20 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
         // Place blocks back into the world
         for (CapturedBlock cb : blocks) {
-            BlockPos targetPos = basePos.add(cb.dx, cb.dy, cb.dz);
-            this.world.setBlockState(targetPos, cb.state, 3);
+            int rx = cb.dx;
+            int rz = cb.dz;
+            if (quadrant == 1) { rx = -cb.dz; rz = cb.dx; }
+            else if (quadrant == 2) { rx = -cb.dx; rz = -cb.dz; }
+            else if (quadrant == 3) { rx = cb.dz; rz = -cb.dx; }
+
+            BlockPos targetPos = basePos.add(rx, cb.dy, rz);
+            IBlockState stateToPlace = cb.state;
+            if (rotation != Rotation.NONE && stateToPlace != null) {
+                try {
+                    stateToPlace = stateToPlace.withRotation(rotation);
+                } catch (Exception ignored) {}
+            }
+            this.world.setBlockState(targetPos, stateToPlace, 3);
             if (cb.tileNBT != null) {
                 TileEntity te = TileEntity.create(this.world, cb.tileNBT);
                 if (te != null) {
