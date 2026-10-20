@@ -1,0 +1,410 @@
+{
+  "music.menu": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.creative": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game.creative": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.nether": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game.nether": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.end": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game.end": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.dragon": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game.end.dragon": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.credits": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  },
+  "music.game.end.credits": {
+    "category": "music",
+    "replace": true,
+    "sounds": [
+      {
+        "name": "music/game/track1",
+        "stream": true
+      },
+      {
+        "name": "music/game/track2",
+        "stream": true
+      },
+      {
+        "name": "music/game/track3",
+        "stream": true
+      },
+      {
+        "name": "music/game/track4",
+        "stream": true
+      },
+      {
+        "name": "music/game/track5",
+        "stream": true
+      },
+      {
+        "name": "music/game/track6",
+        "stream": true
+      },
+      {
+        "name": "music/game/track7",
+        "stream": true
+      }
+    ]
+  }
+}
