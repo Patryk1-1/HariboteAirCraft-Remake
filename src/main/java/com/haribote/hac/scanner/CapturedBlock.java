@@ -53,6 +53,12 @@ public class CapturedBlock {
         buf.writeInt(dy);
         buf.writeInt(dz);
         buf.writeInt(Block.getStateId(state));
+        if (tileNBT != null) {
+            buf.writeBoolean(true);
+            buf.writeCompoundTag(tileNBT);
+        } else {
+            buf.writeBoolean(false);
+        }
     }
 
     public static CapturedBlock readFromBuf(PacketBuffer buf) {
@@ -61,6 +67,12 @@ public class CapturedBlock {
         int dz = buf.readInt();
         int blockId = buf.readInt();
         IBlockState state = Block.getStateById(blockId);
-        return new CapturedBlock(dx, dy, dz, state, null);
+        NBTTagCompound tileNBT = null;
+        try {
+            if (buf.readBoolean()) {
+                tileNBT = buf.readCompoundTag();
+            }
+        } catch (Exception ignored) {}
+        return new CapturedBlock(dx, dy, dz, state, tileNBT);
     }
 }

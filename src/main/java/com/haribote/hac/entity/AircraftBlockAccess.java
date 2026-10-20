@@ -10,6 +10,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.IBlockAccess;
 import net.minecraft.world.WorldType;
 import net.minecraft.world.biome.Biome;
+import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
@@ -20,12 +21,30 @@ import java.util.Map;
 public class AircraftBlockAccess implements IBlockAccess {
     private final EntityHacAircraft aircraft;
     private final Map<BlockPos, CapturedBlock> blockMap = new HashMap<>();
+    private final Map<BlockPos, TileEntity> tileEntityMap = new HashMap<>();
 
     public AircraftBlockAccess(EntityHacAircraft aircraft) {
         this.aircraft = aircraft;
         if (aircraft != null && aircraft.getBlocks() != null) {
             for (CapturedBlock cb : aircraft.getBlocks()) {
-                blockMap.put(new BlockPos(cb.dx, cb.dy, cb.dz), cb);
+                BlockPos relPos = new BlockPos(cb.dx, cb.dy, cb.dz);
+                blockMap.put(relPos, cb);
+                if (cb.tileNBT != null && aircraft.world != null) {
+                    try {
+                        TileEntity te = TileEntity.create(aircraft.world, cb.tileNBT);
+                        if (te != null) {
+                            te.setPos(relPos);
+                            te.setWorld(aircraft.world);
+                            if (cb.state != null) {
+                                try {
+                                    int meta = cb.state.getBlock().getMetaFromState(cb.state);
+                                    ObfuscationReflectionHelper.setPrivateValue(TileEntity.class, te, meta, "blockMetadata", "field_145847_g");
+                                } catch (Throwable ignored) {}
+                            }
+                            tileEntityMap.put(relPos, te);
+                        }
+                    } catch (Exception ignored) {}
+                }
             }
         }
     }
@@ -33,14 +52,24 @@ public class AircraftBlockAccess implements IBlockAccess {
     @Nullable
     @Override
     public TileEntity getTileEntity(BlockPos pos) {
-        return null;
+        return tileEntityMap.get(pos);
+    }
+
+    public Map<BlockPos, TileEntity> getTileEntityMap() {
+        return tileEntityMap;
     }
 
     @Override
     @SideOnly(Side.CLIENT)
     public int getCombinedLight(BlockPos pos, int lightValue) {
         if (aircraft != null && aircraft.world != null) {
-            return aircraft.world.getCombinedLight(pos, lightValue);
+            double rad = Math.toRadians(-aircraft.rotationYaw);
+            double cos = Math.cos(rad);
+            double sin = Math.sin(rad);
+            double rx = pos.getX() * cos - pos.getZ() * sin;
+            double rz = pos.getX() * sin + pos.getZ() * cos;
+            BlockPos worldPos = new BlockPos(aircraft.posX + rx, aircraft.posY + pos.getY(), aircraft.posZ + rz);
+            return aircraft.world.getCombinedLight(worldPos, lightValue);
         }
         return 15 << 20 | 15 << 4;
     }

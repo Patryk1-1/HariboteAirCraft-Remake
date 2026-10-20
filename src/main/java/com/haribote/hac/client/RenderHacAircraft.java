@@ -44,8 +44,12 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, z);
 
-        float yaw = entity.prevRotationYaw + (entity.rotationYaw - entity.prevRotationYaw) * partialTicks;
+        float deltaYaw = entity.rotationYaw - entity.initialYaw;
+        float prevDeltaYaw = entity.prevRotationYaw - entity.initialYaw;
+        float yaw = prevDeltaYaw + (deltaYaw - prevDeltaYaw) * partialTicks;
         GlStateManager.rotate(-yaw, 0.0F, 1.0F, 0.0F);
+
+        com.haribote.hac.entity.AircraftBlockAccess blockAccess = entity.getBlockAccess();
 
         if (!blocks.isEmpty()) {
             this.bindTexture(TextureMap.LOCATION_BLOCKS_TEXTURE);
@@ -53,11 +57,6 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
 
             BlockRendererDispatcher dispatcher = Minecraft.getMinecraft().getBlockRendererDispatcher();
             int brightness = entity.getBrightnessForRender();
-            if (brightness < 0x00F000F0) {
-                brightness = 0x00F000F0;
-            }
-
-            com.haribote.hac.entity.AircraftBlockAccess blockAccess = entity.getBlockAccess();
 
             // PASS 1: Solid & Cutout (opaque blocks, doors, glass, panes, stairs, pyxis, etc.)
             GlStateManager.disableBlend();
@@ -81,10 +80,27 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
             RenderHelper.enableStandardItemLighting();
         }
 
+        // Render all TileEntities (VariedCommodities, Props, Decocraft, CustomNPCs, Chests, Signs, Banners, Heads)
+        if (blockAccess != null && !blockAccess.getTileEntityMap().isEmpty()) {
+            RenderHelper.enableStandardItemLighting();
+            for (java.util.Map.Entry<BlockPos, net.minecraft.tileentity.TileEntity> entry : blockAccess.getTileEntityMap().entrySet()) {
+                BlockPos relPos = entry.getKey();
+                net.minecraft.tileentity.TileEntity te = entry.getValue();
+                if (te != null) {
+                    double tx = relPos.getX() - 0.5D;
+                    double ty = relPos.getY();
+                    double tz = relPos.getZ() - 0.5D;
+                    try {
+                        net.minecraft.client.renderer.tileentity.TileEntityRendererDispatcher.instance.render(te, tx, ty, tz, partialTicks);
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+
         // Render compass arrows on top of Pyxis aligned with world cardinal directions
         for (CapturedBlock cb : blocks) {
             if (cb.state != null && cb.state.getBlock() instanceof BlockPyxis) {
-                renderCompassArrows(cb.dx, cb.dy + 0.505D, cb.dz, yaw);
+                renderCompassArrows(cb.dx, cb.dy + 0.505D, cb.dz, yaw + entity.initialYaw);
             }
         }
 
@@ -124,58 +140,37 @@ public class RenderHacAircraft extends Render<EntityHacAircraft> {
             } catch (Exception ignored) {}
 
             IBakedModel model = dispatcher.getModelForState(renderState);
-            double bx = cb.dx - 0.5D;
-            double by = cb.dy;
-            double bz = cb.dz - 0.5D;
+            if (model == null) continue;
 
-            int color = Minecraft.getMinecraft().getBlockColors().colorMultiplier(renderState, entity.world, new BlockPos(entity.posX + cb.dx, entity.posY + cb.dy, entity.posZ + cb.dz), 0);
-            float red = (float) ((color >> 16) & 255) / 255.0F;
-            float green = (float) ((color >> 8) & 255) / 255.0F;
-            float blue = (float) (color & 255) / 255.0F;
+            if (!started) {
+                buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
+                buffer.setTranslation(-0.5D, 0.0D, -0.5D);
+                started = true;
+            }
 
-            for (EnumFacing facing : EnumFacing.VALUES) {
-                boolean shouldRender = true;
-                try {
-                    shouldRender = renderState.shouldSideBeRendered(blockAccess, cb.getRelativePos(), facing);
-                } catch (Exception ignored) {}
-
-                if (!shouldRender) continue;
-
-                List<BakedQuad> quads = model.getQuads(renderState, facing, 0L);
-                if (!quads.isEmpty()) {
-                    if (!started) {
-                        buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
-                        started = true;
-                    }
-                    for (BakedQuad quad : quads) {
+            try {
+                dispatcher.getBlockModelRenderer().renderModel(blockAccess, model, renderState, cb.getRelativePos(), buffer, false);
+            } catch (Exception ex) {
+                double bx = cb.dx;
+                double by = cb.dy;
+                double bz = cb.dz;
+                for (EnumFacing facing : EnumFacing.VALUES) {
+                    for (BakedQuad quad : model.getQuads(renderState, facing, 0L)) {
                         buffer.addVertexData(quad.getVertexData());
                         buffer.putPosition(bx, by, bz);
                         buffer.putBrightness4(brightness, brightness, brightness, brightness);
-                        if (quad.hasTintIndex()) {
-                            buffer.putColorRGB_F4(red, green, blue);
-                        }
                     }
                 }
-            }
-
-            List<BakedQuad> generalQuads = model.getQuads(renderState, null, 0L);
-            if (!generalQuads.isEmpty()) {
-                if (!started) {
-                    buffer.begin(GL11.GL_QUADS, DefaultVertexFormats.BLOCK);
-                    started = true;
-                }
-                for (BakedQuad quad : generalQuads) {
+                for (BakedQuad quad : model.getQuads(renderState, null, 0L)) {
                     buffer.addVertexData(quad.getVertexData());
                     buffer.putPosition(bx, by, bz);
                     buffer.putBrightness4(brightness, brightness, brightness, brightness);
-                    if (quad.hasTintIndex()) {
-                        buffer.putColorRGB_F4(red, green, blue);
-                    }
                 }
             }
         }
 
         if (started) {
+            buffer.setTranslation(0.0D, 0.0D, 0.0D);
             tessellator.draw();
         }
     }

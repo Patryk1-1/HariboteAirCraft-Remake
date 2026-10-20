@@ -26,12 +26,17 @@ import net.minecraftforge.fml.common.registry.IEntityAdditionalSpawnData;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
+import net.minecraft.entity.EntityLivingBase;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnData {
     private List<CapturedBlock> blocks = new ArrayList<>();
     private AircraftBlockAccess blockAccess;
+    private final Map<UUID, Integer> recentlyDismounted = new HashMap<>();
 
     // Pilot movement inputs
     public float forwardInput = 0.0F;
@@ -41,6 +46,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
     public float rotorAngle = 0.0F;
     public float prevRotorAngle = 0.0F;
+    public float initialYaw = 0.0F;
 
     // Bounds relative to (posX, posY, posZ)
     public double minBoundX = -0.5D, maxBoundX = 0.5D;
@@ -71,6 +77,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         this(worldIn);
         this.blocks = capturedBlocks;
         this.setPosition(origin.getX() + 0.5D, origin.getY(), origin.getZ() + 0.5D);
+        this.initialYaw = initialYaw;
         this.rotationYaw = initialYaw;
         this.prevRotationYaw = initialYaw;
         this.motionX = 0.0D;
@@ -108,14 +115,21 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         this.minBoundZ = -maxXZDist - 0.5D;
         this.maxBoundZ =  maxXZDist + 0.5D;
 
-        float width = (float) ((maxXZDist + 0.5D) * 2.0D);
-        float height = (float) (maxY - minY + 1.0D);
-        this.setSize(Math.min(width, 64.0F), Math.min(height, 32.0F));
+        // Keep physical entity size at 1.5x1.0 so dismounting never ejects players to the roof!
+        this.setSize(1.5F, 1.0F);
         this.setEntityBoundingBox(new AxisAlignedBB(
                 this.posX + minBoundX, this.posY + minBoundY, this.posZ + minBoundZ,
                 this.posX + maxBoundX, this.posY + maxBoundY, this.posZ + maxBoundZ
         ));
         this.blockAccess = new AircraftBlockAccess(this);
+    }
+
+    @Override
+    public AxisAlignedBB getRenderBoundingBox() {
+        return new AxisAlignedBB(
+                this.posX + minBoundX, this.posY + minBoundY, this.posZ + minBoundZ,
+                this.posX + maxBoundX, this.posY + maxBoundY, this.posZ + maxBoundZ
+        );
     }
 
     public AircraftBlockAccess getBlockAccess() {
@@ -256,16 +270,43 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                     this.posX + maxBoundX, this.posY + maxBoundY, this.posZ + maxBoundZ
             ));
 
-            // Carry players standing on the deck (multiplayer walking on deck support!)
+            // Prevent dismounted players from being launched into the roof/sky by vanilla dismountEntity
+            if (!this.world.isRemote && !recentlyDismounted.isEmpty()) {
+                double yawRad = Math.toRadians(this.rotationYaw);
+                double rx = 0.85D * Math.sin(yawRad);
+                double rz = -0.85D * Math.cos(yawRad);
+                List<UUID> toRemove = new ArrayList<>();
+                for (Map.Entry<UUID, Integer> entry : recentlyDismounted.entrySet()) {
+                    EntityPlayer p = this.world.getPlayerEntityByUUID(entry.getKey());
+                    if (p != null) {
+                        p.setPositionAndUpdate(this.posX + rx, this.posY, this.posZ + rz);
+                        p.motionX = 0; p.motionY = 0; p.motionZ = 0; p.fallDistance = 0;
+                    }
+                    if (entry.getValue() <= 1) {
+                        toRemove.add(entry.getKey());
+                    } else {
+                        entry.setValue(entry.getValue() - 1);
+                    }
+                }
+                for (UUID u : toRemove) recentlyDismounted.remove(u);
+            }
+
+            // Carry players and mobs standing on the deck (multiplayer walking & mob transport!)
             if (!this.blocks.isEmpty()) {
                 AxisAlignedBB deckArea = this.getEntityBoundingBox().grow(1.5D, 2.5D, 1.5D);
-                List<EntityPlayer> nearby = this.world.getEntitiesWithinAABB(EntityPlayer.class, deckArea);
-                double yawRad = Math.toRadians(this.rotationYaw);
+                List<EntityLivingBase> nearby = this.world.getEntitiesWithinAABB(EntityLivingBase.class, deckArea);
+                double deckDeltaYaw = this.rotationYaw - this.initialYaw;
+                double yawRad = Math.toRadians(deckDeltaYaw);
                 double cos = Math.cos(yawRad);
                 double sin = Math.sin(yawRad);
 
-                for (EntityPlayer p : nearby) {
-                    if (this.isPassenger(p)) continue;
+                double dYaw = this.rotationYaw - this.prevRotationYaw;
+                double dYawRad = Math.toRadians(-dYaw);
+                double dCos = Math.cos(dYawRad);
+                double dSin = Math.sin(dYawRad);
+
+                for (EntityLivingBase entity : nearby) {
+                    if (this.isPassenger(entity)) continue;
 
                     double highestDeckY = Double.NEGATIVE_INFINITY;
                     boolean onDeck = false;
@@ -277,8 +318,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                         double by = this.posY + cb.dy;
                         double bz = this.posZ + rz;
 
-                        if (p.posX >= bx - 0.75D && p.posX <= bx + 0.75D &&
-                            p.posZ >= bz - 0.75D && p.posZ <= bz + 0.75D) {
+                        if (entity.posX >= bx - 0.75D && entity.posX <= bx + 0.75D &&
+                            entity.posZ >= bz - 0.75D && entity.posZ <= bz + 0.75D) {
                             double blockHeight = (cb.state != null && cb.state.getBlock() instanceof BlockPyxis) ? 0.5D : 1.0D;
                             double blockTop = by + blockHeight;
                             if (blockTop > highestDeckY) {
@@ -288,14 +329,24 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                         }
                     }
 
-                    if (onDeck && p.posY >= highestDeckY - 0.5D && p.posY <= highestDeckY + 2.5D) {
-                        p.move(MoverType.SELF, this.motionX, this.motionY, this.motionZ);
+                    if (onDeck && entity.posY >= highestDeckY - 0.5D && entity.posY <= highestDeckY + 2.5D) {
+                        // Rotational displacement relative to ship center
+                        double relX = entity.posX - this.posX;
+                        double relZ = entity.posZ - this.posZ;
+                        double rotRelX = relX * dCos - relZ * dSin;
+                        double rotRelZ = relX * dSin + relZ * dCos;
+                        double pushX = this.motionX + (rotRelX - relX);
+                        double pushY = this.motionY;
+                        double pushZ = this.motionZ + (rotRelZ - relZ);
 
-                        if (p.posY < highestDeckY) {
-                            p.setPosition(p.posX, highestDeckY, p.posZ);
-                            p.motionY = Math.max(0.0D, this.motionY);
-                            p.onGround = true;
-                            p.fallDistance = 0.0F;
+                        entity.move(MoverType.SELF, pushX, pushY, pushZ);
+                        entity.rotationYaw += dYaw;
+
+                        if (entity.posY < highestDeckY) {
+                            entity.setPosition(entity.posX, highestDeckY, entity.posZ);
+                            entity.motionY = Math.max(0.0D, this.motionY);
+                            entity.onGround = true;
+                            entity.fallDistance = 0.0F;
                         }
                     }
                 }
@@ -337,9 +388,23 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
             if (index == 0) {
                 // Pilot stands at helm station right behind Pyxis on deck level
-                offX = 0.0D;
-                offY = 0.0D;
-                offZ = -0.6D;
+                double yawRad = Math.toRadians(this.rotationYaw);
+                double rx = 0.75D * Math.sin(yawRad);
+                double rz = -0.75D * Math.cos(yawRad);
+                passenger.setPosition(this.posX + rx, this.posY, this.posZ + rz);
+
+                double prevYawRad = Math.toRadians(this.prevRotationYaw);
+                double prevRx = 0.75D * Math.sin(prevYawRad);
+                double prevRz = -0.75D * Math.cos(prevYawRad);
+
+                passenger.prevPosX = this.prevPosX + prevRx;
+                passenger.prevPosY = this.prevPosY;
+                passenger.prevPosZ = this.prevPosZ + prevRz;
+
+                passenger.lastTickPosX = passenger.prevPosX;
+                passenger.lastTickPosY = passenger.prevPosY;
+                passenger.lastTickPosZ = passenger.prevPosZ;
+                return;
             } else {
                 // Other passengers: assign distinct separate blocks resting cleanly on top surface
                 int blockIdx = index;
@@ -355,7 +420,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                 }
             }
 
-            double yawRad = Math.toRadians(this.rotationYaw);
+            double deltaYaw = this.rotationYaw - this.initialYaw;
+            double yawRad = Math.toRadians(deltaYaw);
             double cos = Math.cos(yawRad);
             double sin = Math.sin(yawRad);
             double rx = offX * cos - offZ * sin;
@@ -364,7 +430,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
             passenger.setPosition(this.posX + rx, this.posY + offY, this.posZ + rz);
 
             // Interpolate previous positions perfectly with aircraft to eliminate 100% of camera/flight jitter
-            double prevYawRad = Math.toRadians(this.prevRotationYaw);
+            double prevDeltaYaw = this.prevRotationYaw - this.initialYaw;
+            double prevYawRad = Math.toRadians(prevDeltaYaw);
             double prevCos = Math.cos(prevYawRad);
             double prevSin = Math.sin(prevYawRad);
             double prevRx = offX * prevCos - offZ * prevSin;
@@ -382,7 +449,19 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
     @Override
     public boolean shouldRiderSit() {
-        return true;
+        return false;
+    }
+
+    @Override
+    protected void removePassenger(Entity passenger) {
+        super.removePassenger(passenger);
+        if (!this.world.isRemote && passenger instanceof EntityPlayer) {
+            recentlyDismounted.put(passenger.getUniqueID(), 3);
+            double yawRad = Math.toRadians(this.rotationYaw);
+            double rx = 0.85D * Math.sin(yawRad);
+            double rz = -0.85D * Math.cos(yawRad);
+            passenger.setPositionAndUpdate(this.posX + rx, this.posY, this.posZ + rz);
+        }
     }
 
     @Override
@@ -399,7 +478,8 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         int targetZ = (int) Math.round(this.posZ - 0.5D);
         BlockPos basePos = new BlockPos(targetX, targetY, targetZ);
 
-        int quadrant = Math.floorMod((int) Math.round(this.rotationYaw / 90.0D), 4);
+        float netTurn = this.rotationYaw - this.initialYaw;
+        int quadrant = Math.floorMod((int) Math.round(netTurn / 90.0D), 4);
         Rotation rotation = Rotation.NONE;
         if (quadrant == 1) rotation = Rotation.CLOCKWISE_90;
         else if (quadrant == 2) rotation = Rotation.CLOCKWISE_180;
@@ -424,7 +504,14 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
         }
 
         // Place blocks back into the world
-        for (CapturedBlock cb : blocks) {
+        // PASS 1: Place all blocks using flag 2 (FLAG_NOTIFY_CLIENTS without neighbor update cascade)
+        // Sort by Y ascending so floor and lower door halves are placed before upper door halves & attachments
+        List<CapturedBlock> sortedBlocks = new ArrayList<>(blocks);
+        sortedBlocks.sort(java.util.Comparator.comparingInt(b -> b.dy));
+
+        List<BlockPos> placedPositions = new ArrayList<>();
+
+        for (CapturedBlock cb : sortedBlocks) {
             int rx = cb.dx;
             int rz = cb.dz;
             if (quadrant == 1) { rx = -cb.dz; rz = cb.dx; }
@@ -438,14 +525,38 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
                     stateToPlace = stateToPlace.withRotation(rotation);
                 } catch (Exception ignored) {}
             }
-            this.world.setBlockState(targetPos, stateToPlace, 3);
+            this.world.setBlockState(targetPos, stateToPlace, 2);
+            placedPositions.add(targetPos);
+        }
+
+        // PASS 2: Restore all TileEntities with rotation (e.g. skulls, banners, chests)
+        for (CapturedBlock cb : blocks) {
             if (cb.tileNBT != null) {
+                int rx = cb.dx;
+                int rz = cb.dz;
+                if (quadrant == 1) { rx = -cb.dz; rz = cb.dx; }
+                else if (quadrant == 2) { rx = -cb.dx; rz = -cb.dz; }
+                else if (quadrant == 3) { rx = cb.dz; rz = -cb.dx; }
+
+                BlockPos targetPos = basePos.add(rx, cb.dy, rz);
                 TileEntity te = TileEntity.create(this.world, cb.tileNBT);
                 if (te != null) {
                     te.setPos(targetPos);
+                    te.setWorld(this.world);
+                    if (rotation != Rotation.NONE) {
+                        try {
+                            te.rotate(rotation);
+                        } catch (Exception ignored) {}
+                    }
                     this.world.setTileEntity(targetPos, te);
                 }
             }
+        }
+
+        // PASS 3: Notify blocks so client rendering and lighting update cleanly
+        for (BlockPos pos : placedPositions) {
+            IBlockState st = this.world.getBlockState(pos);
+            this.world.notifyBlockUpdate(pos, st, st, 3);
         }
 
         List<Entity> passengers = new ArrayList<>(this.getPassengers());
@@ -464,6 +575,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
     @Override
     protected void readEntityFromNBT(NBTTagCompound compound) {
+        this.initialYaw = compound.getFloat("initialYaw");
         NBTTagList list = compound.getTagList("blocks", 10);
         this.blocks.clear();
         for (int i = 0; i < list.tagCount(); i++) {
@@ -474,6 +586,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
 
     @Override
     protected void writeEntityToNBT(NBTTagCompound compound) {
+        compound.setFloat("initialYaw", this.initialYaw);
         NBTTagList list = new NBTTagList();
         for (CapturedBlock cb : blocks) {
             list.appendTag(cb.writeToNBT());
@@ -484,6 +597,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     @Override
     public void writeSpawnData(ByteBuf buffer) {
         PacketBuffer packetBuffer = new PacketBuffer(buffer);
+        packetBuffer.writeFloat(this.initialYaw);
         packetBuffer.writeFloat(this.rotationYaw);
         packetBuffer.writeInt(blocks.size());
         for (CapturedBlock cb : blocks) {
@@ -494,6 +608,7 @@ public class EntityHacAircraft extends Entity implements IEntityAdditionalSpawnD
     @Override
     public void readSpawnData(ByteBuf additionalData) {
         PacketBuffer packetBuffer = new PacketBuffer(additionalData);
+        this.initialYaw = packetBuffer.readFloat();
         this.rotationYaw = packetBuffer.readFloat();
         this.prevRotationYaw = this.rotationYaw;
         int size = packetBuffer.readInt();
